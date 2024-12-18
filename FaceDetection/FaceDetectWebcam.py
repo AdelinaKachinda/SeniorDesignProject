@@ -1,10 +1,8 @@
 import cv2
+import mediapipe as mp
 import time
 
-# Load the pre-trained Haar Cascade classifier for face detection
-face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
-
-# Initialize video capture (0 for default webcam)
+# Initialize webcam capture (0 for default webcam)
 cap = cv2.VideoCapture(0)
 
 # Check if the webcam is accessible
@@ -12,54 +10,63 @@ if not cap.isOpened():
     print("Error: Could not access the webcam.")
     exit()
 
+# Initialize the previous frame time for FPS calculation
+pTime = 0
+
+# Initialize Mediapipe face detection module and drawing utilities
+mpFaceDetection = mp.solutions.face_detection
+mpDraw = mp.solutions.drawing_utils
+faceDetection = mpFaceDetection.FaceDetection(min_detection_confidence=0.5)  # Adjust confidence as needed
+
 print("Press 'q' to quit the program.")
 
-# Initialize the time for FPS calculation
-prev_time = time.time()
-
+# Main loop to process webcam frames
 while True:
-    # Read a frame from the webcam
-    ret, frame = cap.read()
-    if not ret:
-        print("Error: Could not read the frame.")
+    # Capture a frame from the webcam
+    success, image = cap.read()
+    if not success:
+        print("Error: Could not read a frame from the webcam.")
         break
 
-    # Convert the frame to grayscale for face detection
-    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+    # Convert the frame to RGB as Mediapipe requires RGB input
+    imgRGB = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
 
-    # Detect faces in the grayscale image with stricter parameters for accuracy
-    faces = face_cascade.detectMultiScale(
-        gray,
-        scaleFactor=1.2,    # Slightly higher scale factor for more precise detections
-        minNeighbors=8,     # Increase minNeighbors to reduce false positives
-        minSize=(50, 50)    # Increase minSize for detecting larger, clearer faces
-    )
+    # Perform face detection on the RGB frame
+    results = faceDetection.process(imgRGB)
 
-    # Ensure only the largest face is detected
-    if len(faces) > 0:
-        # Select the face with the largest bounding box area
-        face = max(faces, key=lambda f: f[2] * f[3])
-        x, y, w, h = face
+    # If faces are detected, draw bounding boxes and detection scores
+    if results.detections:
+        for id, detection in enumerate(results.detections):
+            # Extract the bounding box coordinates
+            bboxC = detection.location_data.relative_bounding_box
+            ih, iw, ic = image.shape  # Get image dimensions
+            bbox = int(bboxC.xmin * iw), int(bboxC.ymin * ih), \
+                   int(bboxC.width * iw), int(bboxC.height * ih)
 
-        # Draw a bounding box around the detected face
-        cv2.rectangle(frame, (x, y), (x + w, y + h), (255, 0, 255), 2)
+            # Draw a rectangle around the detected face
+            cv2.rectangle(image, bbox, (255, 0, 255), 2)
 
-        # Calculate Frames Per Second (FPS)
-        current_time = time.time()
-        fps = 1 / (current_time - prev_time)
-        prev_time = current_time
+            # Display the detection confidence score above the bounding box
+            confidence = int(detection.score[0] * 100)  # Convert to percentage
+            cv2.putText(image, f'{confidence}%', (bbox[0], bbox[1] - 10),
+                        cv2.FONT_HERSHEY_PLAIN, 2, (255, 0, 255), 2)
 
-        # Display FPS above the bounding box
-        cv2.putText(frame, f'FPS: {int(fps)}', (x, y - 10),
-                    cv2.FONT_HERSHEY_SIMPLEX, 1.5, (255, 0, 255), 2)
+    # Calculate Frames Per Second (FPS)
+    cTime = time.time()
+    fps = 1 / (cTime - pTime) if (cTime - pTime) > 0 else 0
+    pTime = cTime
 
-    # Display the frame with face detection and FPS
-    cv2.imshow('Face Detection with FPS', frame)
+    # Display FPS on the video frame
+    cv2.putText(image, f'FPS: {int(fps)}', (20, 70),
+                cv2.FONT_HERSHEY_PLAIN, 3, (0, 255, 0), 3)
 
-    # Exit the loop when 'q' is pressed
+    # Show the processed frame
+    cv2.imshow("Webcam Face Detection", image)
+
+    # Exit loop when 'q' is pressed
     if cv2.waitKey(1) & 0xFF == ord('q'):
         break
 
-# Release the webcam and close all OpenCV windows
+# Release webcam and close all OpenCV windows
 cap.release()
 cv2.destroyAllWindows()
