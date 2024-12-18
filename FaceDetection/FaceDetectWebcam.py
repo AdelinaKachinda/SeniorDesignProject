@@ -27,23 +27,27 @@ while True:
     # Convert the frame to grayscale for face detection
     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 
-    # Detect faces in the grayscale image
+    # Detect faces in the grayscale image with stricter parameters for accuracy
     faces = face_cascade.detectMultiScale(
-        gray,               # Input image
-        scaleFactor=1.1,    # Scale factor for image pyramid
-        minNeighbors=5,     # Minimum neighbors for a valid detection
-        minSize=(30, 30)    # Minimum size of detected faces
+        gray,
+        scaleFactor=1.2,    # Slightly higher scale factor for more precise detections
+        minNeighbors=8,     # Increase minNeighbors to reduce false positives
+        minSize=(50, 50)    # Increase minSize for detecting larger, clearer faces
     )
 
-    # Calculate Frames Per Second (FPS)
-    current_time = time.time()  # Current time
-    fps = 1 / (current_time - prev_time)  # FPS = 1 / time taken for one frame
-    prev_time = current_time  # Update previous time
+    # Ensure only the largest face is detected
+    if len(faces) > 0:
+        # Select the face with the largest bounding box area
+        face = max(faces, key=lambda f: f[2] * f[3])
+        x, y, w, h = face
 
-    # Draw rectangles around detected faces and display FPS
-    for (x, y, w, h) in faces:
-        # Draw a bounding box around the face
+        # Draw a bounding box around the detected face
         cv2.rectangle(frame, (x, y), (x + w, y + h), (255, 0, 255), 2)
+
+        # Calculate Frames Per Second (FPS)
+        current_time = time.time()
+        fps = 1 / (current_time - prev_time)
+        prev_time = current_time
 
         # Display FPS above the bounding box
         cv2.putText(frame, f'FPS: {int(fps)}', (x, y - 10),
